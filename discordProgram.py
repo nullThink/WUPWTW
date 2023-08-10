@@ -6,6 +6,10 @@ from discord.ext import commands, tasks
 from botSecrets import discordSecrets
 import asyncio
 
+# For implementing scheduler.
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+
 intent = discord.Intents.default()
 intent.members = True
 intent.messages = True
@@ -64,9 +68,9 @@ def findRoute(guild):
             return route
     return ""
 
-# Mostly done
-# Maybe add in logic checking if that role is 
-# already the worm role being patrolled.
+# Finished
+# IDEA: Allow different role groups to have different times
+# for worm checking. Have multiple worm groups.
 @client.command()
 async def define_worm_role(ctx, *args):
     # For testing:
@@ -84,6 +88,8 @@ async def define_worm_role(ctx, *args):
         new_role = ctx.guild.default_role
         await ctx.channel.send("Sorry, the role '{}' doesn't exist. We're gonna watch everyone for now.".format(new_role_str))
         findRoute(ctx.guild)["wormer_role"] = new_role
+    elif(new_role == findRoute(ctx.guild)["wormer_role"]):
+        await ctx.channel.send("This role is already being watched.")
     else:
         findRoute(ctx.guild)["wormer_role"] = new_role
         await ctx.channel.send(WORM_ROLE_SET_MSG.format(ctx.author.id, findRoute(ctx.guild)["wormer_role"].id))
