@@ -1,3 +1,14 @@
+## Updates
+
+8/13/2023: 
+### Discord
+- APScheduler added in for scheduling events. 
+- Feature to designate time to send checker added in.
+- Feature to remove a designated time to send checker added in.
+- Also added in more logic for the `define_worm_role` command.
+- Added `show_patrol_route` command for checking when worm is being checked.
+- 
+
 # WUPWTW
 
 ## Note: This project started from a bet over Spring Break 2023.
