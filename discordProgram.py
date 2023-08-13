@@ -5,6 +5,7 @@ import time
 from discord.ext import commands, tasks
 from botSecrets import discordSecrets
 import asyncio
+import random
 
 # For implementing scheduler.
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -31,6 +32,9 @@ botClientUser = discord.ClientUser(state=discord.Client, data={"username":"Worm 
 global patrol_route
 global worm_channel
 global server_list
+global scheduler
+
+scheduler = AsyncIOScheduler()
 
 patrol_route = []
 server_list = []
@@ -53,8 +57,9 @@ Thanks for making your server a safer community. :worm:
 
 *Non-implemented*
 
-Designate a time for when to patrol the channel with: `~patrol_time [time-24hr]` 
-Designate a patrol frequency: `~patrol_frequench [frequency per day]`
+Designate a time for when to patrol the channel with: `~add_checking_time ##h##m` 
+Designate a random patrol pattern with: `~add_checking_time random
+Designate a patrol frequency: `~patrol_frequency [frequency per day]`
 
 """
 WORM_CHANNEL_SET_MSG = "Thanks <@{0}>. We'll be patrolling <#{1}> now."
@@ -67,6 +72,88 @@ def findRoute(guild):
         if(route["server"] == guild):
             return route
     return ""
+
+# Needs testing long term (need to wait or change job schedule temp)
+async def assign_random_time():
+    for route in patrol_route:
+        print("Assigning random time for {}".format(route["server"].name))
+        if(route["time"]["randomly_set"]):
+            if(len(route["time"]["checking_time_ids"]) > 0):
+                scheduler.remove_job(route["time"]["checking_time_ids"][0])
+                route["time"]["checking_time_ids"].pop()
+                route["time"]["checking_time"].pop()
+
+            hours = random.randint(0, 23)
+            minute = random.randint(0, 59)
+
+            guild_job_id = str(route["server"].id)+"0"
+
+            route["time"]["checking_time"].append("{0}h{1}m".format(hours, minute))
+            route["time"]["checking_time_ids"].append(guild_job_id)
+
+            def jobfunc():
+                itsWormTime(route)
+
+            scheduler.add_job(jobfunc, trigger=CronTrigger(hour=hours, minute=minute), id=guild_job_id)
+            print("Post-job assignment")
+
+# Mostly finished
+# Needs message to send for setting time.  
+@client.command()
+async def add_checking_time(ctx, *args):
+    settingGuild = findRoute(ctx.guild)
+
+    if(args[0] == "random"):
+        if(settingGuild["time"]["checking_time"] > 0):
+            for id in settingGuild["time"]["checking_time_ids"]:
+                scheduler.remove_job(id)
+
+        settingGuild["time"] = {"randomly_set":True,
+                                "checking_time":[], 
+                                "checking_time_ids":[]}
+        print(settingGuild)
+    else:
+        new_job_id = str(settingGuild["server"].id)+str(len(settingGuild["time"]["checking_time_ids"]))
+        
+        hoursandmins = args[0].split("h")
+        hoursandmins = [hoursandmins[0], hoursandmins[1].split("m")[0]]
+
+        settingGuild["time"]["checking_time"].append(args[0])
+        settingGuild["time"]["checking_time_ids"].append(new_job_id)
+
+        def jobfunc():
+            itsWormTime(settingGuild)
+            
+        scheduler.add_job(jobfunc, trigger=CronTrigger(hour=hoursandmins[0], minute=hoursandmins[1]), id=new_job_id)
+
+        if(settingGuild["time"]["randomly_set"]):
+            settingGuild["time"]["randomly_set"] = False
+        
+        print(settingGuild)
+        
+# Mostly working. Add in messages to send to server.
+@client.command()
+async def remove_checking_time(ctx, *args):
+    settingGuild = findRoute(ctx.guild)
+    if args[0] in settingGuild["time"]["checking_time"]:
+        popIndex = settingGuild["time"]["checking_time"].index(args[0])
+        idToRemove = settingGuild["time"]["checking_time_ids"][popIndex]
+        
+        scheduler.remove_job(idToRemove)
+        settingGuild["time"]["checking_time"].remove(args[0])
+        settingGuild["time"]["checking_time_ids"].remove(idToRemove)
+
+        if(len(settingGuild["time"]["checking_time"]) == 0):
+            settingGuild["time"]["randomly_set"] = True
+    
+    print(settingGuild)
+    
+# Format server message
+# Also add behavior to not show patrol time if random is true.
+@client.command()
+async def show_patrol_times(ctx):
+    for time in findRoute(ctx.guild)["time"]["checking_time"]:
+       await ctx.channel.send(time)
 
 # Finished
 # IDEA: Allow different role groups to have different times
@@ -121,14 +208,21 @@ async def help_remind(ctx):
     print("Help recieved")
     await ctx.author.send(content=WORM_WELCOME_DM_MSG)
 
-
 @client.event
 async def on_guild_join(guild):
     global server_list
     global patrol_route
 
     server_list.append(guild)
-    route_info = {"server":guild, "wormer_role":"", "worm_chat":""}
+    route_info = {"server":guild, 
+                  "wormer_role":"", 
+                  "worm_chat":"", 
+                  "time":{
+                      "randomly_set":True, 
+                      "checking_time":[], 
+                      "checking_time_ids":[]
+                      }
+                      }
     patrol_route.append(route_info)
     guild.owner.send()
 
@@ -143,7 +237,8 @@ async def on_guild_leave(guild):
             patrol_route.remove(route)
             return
 
-# Decide at a random time on the hour/hours or set time to send message.
+# Decide at a random time on the hour/hours or 
+# set time to send message.
 # Add in scheduler as shown here:
 # https://stackoverflow.com/questions/64491012/how-do-i-send-a-message-in-a-channal-at-a-specific-time
 @client.event
@@ -155,7 +250,16 @@ async def on_ready():
     for guild in client.guilds:
         if(findRoute(guild) == ""):
             server_list.append(guild)
-            patrol_route.append({"server": guild, "wormer_role":"", "worm_chat":""})
+            patrol_route.append(
+                {"server": guild, 
+                 "wormer_role":"", 
+                 "worm_chat":"",
+                 "time":{
+                     "randomly_set":True, 
+                     "checking_time":[], 
+                     "checking_time_ids":[]
+                     }
+                })
     
     #vvvvv This is all for testing the send message vvvvv
 
@@ -165,18 +269,19 @@ async def on_ready():
     # route = patrol_route[0]
     # guild = route["server"]
 
-#     # IDEA: Allow for user to designate a certain channel as the worm channel
-#     worm_channel = await guild.create_text_channel("worm-check", overwrites={guild.default_role: discord.PermissionOverwrite(read_messages=False),
-#     guild.me: discord.PermissionOverwrite(read_messages=True)
-# })
-    # guildroles = await guild.fetch_roles()
-    # for role in guildroles:
-    #     if(role.name == WORM_GANG_ROLE):
-    #         worm_role = role
-    # await worm_channel.set_permissions(worm_role, read_messages = True, send_messages=True)
+    # Make in defineTime, when added to server, 
+    # make default worm schedule time to 
+    # either midnight or 6pm
 
+    # For testing purposes
     for route in patrol_route:
         await itsWormTime(route)
+
+    for job in scheduler.get_jobs():
+        if job.id is not "random-time-assigner":
+            scheduler.add_job(assign_random_time, trigger=CronTrigger(hour="00"), id="random-time-assigner")
+
+    scheduler.start()
    
 
 # Replace with creating thread, and then closing thread after like 30 minutes or an hour.
@@ -225,8 +330,19 @@ async def itsWormTime(server):
         #     member_role_list.append(role.name)
         if(worm_role in member.roles):
             worm_gang.append(member)
-    print(worm_gang)
-    await worm_channel.send(content="", file=theImage)
+    # print(worm_gang)
+    # Change to create a thread to send message.
+    wormingThread = await worm_channel.create_thread(name="Who up playing with they worm?", type=discord.ChannelType.public_thread, auto_archive_duration=60)
+    await wormingThread.send(content="", file=theImage)
+
+    # # Close thread after 60 seconds
+    # closeTime = time.time() + 60
+
+    # while(time.time() != closeTime):
+    #     wormingThread.locked = False
+
+    #newThread = worm_channel.create_thread()
+    #await worm_channel.send(content="", file=theImage)
 
 def runDiscord():
     print("Running Discord!")
