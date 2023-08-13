@@ -7,7 +7,6 @@
 - Feature to remove a designated time to send checker added in.
 - Also added in more logic for the `define_worm_role` command.
 - Added `show_patrol_route` command for checking when worm is being checked.
-- 
 
 # WUPWTW
 
