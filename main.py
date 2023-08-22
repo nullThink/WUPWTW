@@ -6,7 +6,7 @@ TWITTER = 1
 DISCORD = 2
 TWILIO = 3
 
-programState = DISCORD
+programState = TWITTER
 
 if programState == TWITTER:
     runTwitter()
