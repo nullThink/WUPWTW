@@ -21,3 +21,7 @@ To add in the bot to a server and try it out, click this link: https://discord.c
 Or, if you don't feel like inviting it to your server, join my testing server here: https://discord.gg/w3CtfWsWx (let me know when the link breaks, we got 30 days from 8/8/23)
 
 It won't work at the moment since it's not perpetually running. Just let me know if you want it to run. Or maybe by the time you see this, there's already a server running it.
+
+# Twitter
+Follow the bot at https://twitter.com/wupwtw 
+To allow it to run indefinitely, the code was uploaded to PythonAnywhere. This will probably be the method of 24/7 for the Discord bot (and Twilio/Slack bot if that gets made).
